@@ -1,0 +1,12 @@
+*
+!.gitignore
+!*/
+!*.dll
+!*.lib
+!*.cpp
+!*.vcxproj
+!*.png
+!*.h
+!*.pdf
+!*.raw
+!*.txt
