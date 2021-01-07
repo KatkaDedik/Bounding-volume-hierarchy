@@ -426,7 +426,7 @@ protected:
 	void keyboard(unsigned char key, int x, int y) override
 	{
 		BaseWindow::keyboard(key, x, y);
-		const float step = 0.1f;
+		const float step = 0.05f;
 		switch (key)
 		{
 		case 'v':

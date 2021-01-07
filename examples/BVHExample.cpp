@@ -22,8 +22,7 @@
 //////////////////////////////////////////////////////////
 
 // Defines the raw file that will be loaded.
-const string BVHExample::PATH = "models/dolphins.raw";
-
+const string BVHExample::PATH = "models/beethoven.raw";
 
 void BVHExample::comparePoint(const Tuple3f & point, std::tuple<float, float, float, float, float, float> & currentMM)
 {
@@ -201,6 +200,64 @@ BVH* BVHExample::construct(unordered_set<Triangle*> triangles, int depth, Volume
 	}
 }
 
+bool isVertexVisible(const Tuple3f& vertex, const Tuple3f& cameraPosition, Vector3f cameraNormal)
+{
+	Vector3f v(cameraPosition.GetX() - vertex.GetX(), cameraPosition.GetY() - vertex.GetY(), cameraPosition.GetZ() - vertex.GetZ());
+	return cameraNormal.Dot(v) <= 0.000001f;
+}
+
+/**
+ * @return -1 if box is not visible
+ *		   0 if box is partialy visible
+ *		   1 if box is visible
+ **/
+int isBoxVisible(const AABB& box, const Tuple3f& cameraPosition, const Vector3f & cameraNormal)
+{
+	Tuple3f max = box.getMax();
+	Tuple3f min = box.getMin();
+
+	Vector3f radial1(max.GetX() - min.GetX(), max.GetY() - min.GetY(), max.GetZ() - min.GetZ());
+	Vector3f radial2(min.GetX() - max.GetX(), max.GetY() - min.GetY(), max.GetZ() - min.GetZ());
+	Vector3f radial3(max.GetX() - min.GetX(), min.GetY() - max.GetY(), max.GetZ() - min.GetZ());
+	Vector3f radial4(min.GetX() - max.GetX(), min.GetY() - max.GetY(), max.GetZ() - min.GetZ());
+
+	float maxDotProduct = std::abs(cameraNormal.Dot(radial1));
+	float dotProduct2 = std::abs(cameraNormal.Dot(radial2));
+	float dotProduct3 = std::abs(cameraNormal.Dot(radial3));
+	float dotProduct4 = std::abs(cameraNormal.Dot(radial4));
+
+	Tuple3f toCheckVertex1 = max;
+	Tuple3f toCheckVertex2 = min;
+
+	if (maxDotProduct < dotProduct2)
+	{
+		maxDotProduct = dotProduct2;
+		toCheckVertex1 = Tuple3f(min.GetX(), max.GetY(), max.GetZ());
+		toCheckVertex2 = Tuple3f(max.GetX(), min.GetY(), min.GetZ());
+	}
+	if (maxDotProduct < dotProduct3)
+	{
+		maxDotProduct = dotProduct3;
+		toCheckVertex1 = Tuple3f(max.GetX(), min.GetY(), max.GetZ());
+		toCheckVertex2 = Tuple3f(min.GetX(), max.GetY(), min.GetZ());
+	}
+	if (maxDotProduct < dotProduct4)
+	{
+		maxDotProduct = dotProduct4;
+		toCheckVertex1 = Tuple3f(min.GetX(), min.GetY(), max.GetZ());
+		toCheckVertex2 = Tuple3f(max.GetX(), max.GetY(), min.GetZ());
+	}
+
+	int ret = -1;
+	if (isVertexVisible(toCheckVertex1, cameraPosition, cameraNormal)) {
+		ret++;
+	}
+	if (isVertexVisible(toCheckVertex2, cameraPosition, cameraNormal)) {
+		ret++;
+	}
+	return ret;
+}
+
 /**
  * This method will return all possibly visible triangles from the current camera (assuming orthographic projection).
  * In other words, the method will return all triangles that have at least one vertex in a half-space defined by a plane.
@@ -235,6 +292,47 @@ unordered_set<Triangle*> BVHExample::pvs(BVH* node, const Tuple3f cameraPosition
 {
 	if (AABB* aabb = dynamic_cast<AABB*>(node))
 	{
+		int visibilityCheck = isBoxVisible(*aabb, cameraPosition, cameraNormal);
+		unordered_set<Triangle*> visible;
+
+		switch (visibilityCheck) 
+		{
+		case(-1): 
+			return unordered_set<Triangle*>();
+			break;
+		case(0):
+			visibleVolumes.insert(node);
+			if (node->isLeaf()) 
+			{
+				for(auto triangle : node->getTriangles())
+				{
+					testedTriangles++;
+					if (isVertexVisible(triangle->v1, cameraPosition, cameraNormal) ||
+						isVertexVisible(triangle->v2, cameraPosition, cameraNormal) ||
+						isVertexVisible(triangle->v3, cameraPosition, cameraNormal)) 
+					{
+						visible.insert(triangle);
+					}
+				}
+			}
+			else
+			{
+				auto leftVisible = pvs(node->getLeft(), cameraPosition, cameraNormal, cameraRightVector, cameraUpVector, testedTriangles, visibleVolumes);
+				visible.insert(leftVisible.begin(), leftVisible.end());
+				auto rightVisible = pvs(node->getRight(), cameraPosition, cameraNormal, cameraRightVector, cameraUpVector, testedTriangles, visibleVolumes);
+				visible.insert(rightVisible.begin(), rightVisible.end());
+			}
+			return visible;
+			break;
+		case(1):
+			visibleVolumes.insert(node);
+			return aabb->getTriangles();
+			break;
+		default:
+			break;
+		}
+
+
 		visibleVolumes.insert(node);
 		testedTriangles = -1;
 		return 	aabb->getTriangles();
