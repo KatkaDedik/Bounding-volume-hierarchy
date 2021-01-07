@@ -28,6 +28,8 @@ private:
 	/** The point to the right node (if any). */
 	BVH* right = nullptr;
 
+	
+
 public:
 
 	/** Constructs a new node in the tree encapsulating the given set of triangle. */
@@ -801,6 +803,8 @@ protected:
 	/******************************************************************************************************************/
 	/*************************************************** ASSIGNMENT ***************************************************/
 	/******************************************************************************************************************/
+	static void BVHExample::comparePoint(const Tuple3f& point, std::tuple<float, float, float, float, float, float>& currentMM);
+	static const std::tuple<float, float, float, float, float, float> findMinsAndMax(const unordered_set<Triangle*>& triangles);
 
 	// For the detailed documentation of this method see BVHExample.cpp
 	BVH* construct(unordered_set<Triangle*> triangles, int depth, VolumeType volumeType) const;

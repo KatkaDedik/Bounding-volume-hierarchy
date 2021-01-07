@@ -24,6 +24,130 @@
 // Defines the raw file that will be loaded.
 const string BVHExample::PATH = "models/dolphins.raw";
 
+
+void BVHExample::comparePoint(const Tuple3f & point, std::tuple<float, float, float, float, float, float> & currentMM)
+{
+	if (point.GetX() < std::get<0>(currentMM)) {
+		std::get<0>(currentMM) = point.GetX();
+	}
+	if (point.GetX() > std::get<1>(currentMM)) {
+		std::get<1>(currentMM) = point.GetX();
+	}
+	if (point.GetY() < std::get<2>(currentMM)) {
+		std::get<2>(currentMM) = point.GetY();
+	}
+	if (point.GetY() > std::get<3>(currentMM)) {
+		std::get<3>(currentMM) = point.GetY();
+	}
+	if (point.GetZ() < std::get<4>(currentMM)) {
+		std::get<4>(currentMM) = point.GetZ();
+	}
+	if (point.GetZ() > std::get<5>(currentMM)) {
+		std::get<5>(currentMM) = point.GetZ();
+	}
+}
+
+const std::tuple<float, float, float, float, float, float> BVHExample::findMinsAndMax(const unordered_set<Triangle*>& triangles) 
+{
+	float minX = (*triangles.begin())->v1.GetX();
+	float maxX = (*triangles.begin())->v1.GetX();
+	float minY = (*triangles.begin())->v1.GetY();
+	float maxY = (*triangles.begin())->v1.GetY();
+	float minZ = (*triangles.begin())->v1.GetZ();
+	float maxZ = (*triangles.begin())->v1.GetZ();
+
+	auto ret = std::make_tuple(minX, maxX, minY, maxY, minZ, maxZ);
+
+	for (Triangle* triangle : triangles)
+	{	
+		//check 1st point
+		BVHExample::comparePoint(triangle->v1, ret);
+
+		//check 2nd point
+		BVHExample::comparePoint(triangle->v2, ret);
+
+		//check 3rd point
+		BVHExample::comparePoint(triangle->v3, ret);
+	}
+	return ret;
+}
+
+std::tuple<unordered_set<Triangle*>, unordered_set<Triangle*>> cutModel(AABB & parent)
+{
+	Tuple3f min = parent.getMin();
+	Tuple3f max = parent.getMax();
+
+	float xAxisSize = max.x - min.x;
+	float yAxisSize = max.y - min.y;
+	float zAxisSize = max.z - min.z;
+
+	int axisIndex = 0;
+	float axisPosition = min.x + xAxisSize / 2;
+
+	if (yAxisSize > xAxisSize) 
+	{
+
+		if (zAxisSize > yAxisSize) 
+		{
+			axisIndex = 2;
+			axisPosition = min.z + zAxisSize / 2;
+		}
+		else 
+		{
+			axisIndex = 1;
+			axisPosition = min.y + yAxisSize / 2;
+		}
+	}
+	else if (zAxisSize > xAxisSize) 
+	{
+		axisIndex = 2;
+		axisPosition = min.z + zAxisSize / 2;
+	}
+
+	unordered_set<Triangle*> leftSet;
+	unordered_set<Triangle*> rightSet;
+
+	for(auto triangle : parent.getTriangles())
+	{
+		switch (axisIndex)
+		{
+		case(0):
+			if (triangle->v1.x > axisPosition || triangle->v2.x > axisPosition || triangle->v3.x > axisPosition)
+			{
+				rightSet.insert(triangle);
+			}
+			if (triangle->v1.x < axisPosition || triangle->v2.x < axisPosition || triangle->v3.x < axisPosition)
+			{
+				leftSet.insert(triangle);
+			}
+			break;
+		case(1):
+			if (triangle->v1.y > axisPosition || triangle->v2.y > axisPosition || triangle->v3.y > axisPosition)
+			{
+				rightSet.insert(triangle);
+			}
+			if (triangle->v1.y < axisPosition || triangle->v2.y < axisPosition || triangle->v3.y < axisPosition)
+			{
+				leftSet.insert(triangle);
+			}
+			break;
+		case(2):
+			if (triangle->v1.z > axisPosition || triangle->v2.z > axisPosition || triangle->v3.z > axisPosition)
+			{
+				rightSet.insert(triangle);
+			}
+			if (triangle->v1.z < axisPosition || triangle->v2.z < axisPosition || triangle->v3.z < axisPosition)
+			{
+				leftSet.insert(triangle);
+			}
+			break;
+		default:
+			break;
+		}
+	}
+	return std::make_tuple(leftSet, rightSet);
+}
+
 /**
  * This method will construct a binary bounding volume hierarchy (BVH) tree from the set of triangles of the given depth.
  * The geometry that should be used to build the tree is defined by the volumeType parameter and can be either axis-aligned bounding box or sphere.
@@ -43,7 +167,32 @@ BVH* BVHExample::construct(unordered_set<Triangle*> triangles, int depth, Volume
 {
 	if (volumeType == VolumeType::AxisAlignedBoundingBox)
 	{
-		return new AABB(-1, -1, -1, 1, 1, 1, triangles);
+		if (depth == 0) 
+		{
+			return nullptr;
+			BVHExample::construct(triangles, depth - 1, VolumeType::AxisAlignedBoundingBox);
+		}
+
+		auto borders = findMinsAndMax(triangles);
+
+		AABB *box = new AABB(std::get<0>(borders), std::get<2>(borders), std::get<4>(borders),
+			std::get<1>(borders), std::get<3>(borders), std::get<5>(borders), triangles);
+
+		auto children = cutModel(*box);
+
+		auto leftChild = construct(std::get<0>(children), depth - 1, volumeType);
+		auto rightChild = construct(std::get<1>(children), depth - 1, volumeType);
+		
+		if (depth != 1)
+		{
+			box->setLeft(leftChild);
+			box->setRight(rightChild);
+
+			leftChild->setParent(box);
+			rightChild->setParent(box);
+		}
+		
+		return box;
 	}
 	else
 	{
@@ -80,7 +229,9 @@ BVH* BVHExample::construct(unordered_set<Triangle*> triangles, int depth, Volume
  *
  * @return The method will return all triangles that are visible from the camera
  */
-unordered_set<Triangle*> BVHExample::pvs(BVH* node, const Tuple3f cameraPosition, const Vector3f cameraNormal, const Vector3f cameraRightVector, const Vector3f cameraUpVector, int& testedTriangles, unordered_set<BVH*>& visibleVolumes) const
+unordered_set<Triangle*> BVHExample::pvs(BVH* node, const Tuple3f cameraPosition, const Vector3f cameraNormal, 
+	const Vector3f cameraRightVector, const Vector3f cameraUpVector, 
+	int& testedTriangles, unordered_set<BVH*>& visibleVolumes) const
 {
 	if (AABB* aabb = dynamic_cast<AABB*>(node))
 	{

@@ -1,0 +1,4 @@
+D:\School\PA010_Graphics\pa010_2_bvh\Debug\Skeleton (BVH).exe
+D:\School\PA010_Graphics\pa010_2_bvh\Debug\Skeleton (BVH).pdb
+D:\School\PA010_Graphics\pa010_2_bvh\Debug\glut32.lib
+D:\School\PA010_Graphics\pa010_2_bvh\Debug\glut32.dll
