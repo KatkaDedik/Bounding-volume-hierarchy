@@ -17,7 +17,7 @@
 class BVH
 {
 
-private:
+public:
 
 	/** The set of triangles in the node. */
 	unordered_set<Triangle*> triangles;
@@ -29,8 +29,6 @@ private:
 	BVH* right = nullptr;
 
 	
-
-public:
 
 	/** Constructs a new node in the tree encapsulating the given set of triangle. */
 	BVH(unordered_set<Triangle*> triangles) : triangles(triangles)
@@ -803,11 +801,9 @@ protected:
 	/******************************************************************************************************************/
 	/*************************************************** ASSIGNMENT ***************************************************/
 	/******************************************************************************************************************/
-	static void BVHExample::comparePoint(const Tuple3f& point, std::tuple<float, float, float, float, float, float>& currentMM);
-	static const std::tuple<float, float, float, float, float, float> findMinsAndMax(const unordered_set<Triangle*>& triangles);
-
+	
 	// For the detailed documentation of this method see BVHExample.cpp
-	BVH* construct(unordered_set<Triangle*> triangles, int depth, VolumeType volumeType) const;
+	BVH* construct(const unordered_set<Triangle*> & triangles, int depth, VolumeType volumeType) const;
 
 	// For the detailed documentation of this method see BVHExample.cpp
 	unordered_set<Triangle*> pvs(BVH* node, const Tuple3f cameraPosition, const Vector3f cameraNormal, const Vector3f cameraRightVector, const Vector3f cameraUpVector, int& testedTriangles, unordered_set<BVH*>& visibleVolumes) const;

@@ -31,6 +31,14 @@ Tuple3f Tuple3f::operator+ (const Tuple3f& rhs) const
 	return Tuple3f(this->x + rhs.x, this->y + rhs.y, this->z + rhs.z);
 }
 
+Tuple3f& Tuple3f::operator+= (const Tuple3f& rhs)
+{
+	this->x += rhs.x;
+	this->y += rhs.y;
+	this->z += rhs.z;
+	return *this;
+}
+
 Tuple3f Tuple3f::operator- (const Tuple3f& rhs) const {
 	return Tuple3f(this->x - rhs.x, this->y - rhs.y, this->z - rhs.z);
 }

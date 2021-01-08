@@ -1,5 +1,6 @@
 #include "BVHExample.h"
 
+
 /////////////// Controls. ////////////////////////////////
 // • Use the mouse + left button to rotate the view.
 // • Use mouse + shift + left button to zoom in and out.
@@ -22,9 +23,30 @@
 //////////////////////////////////////////////////////////
 
 // Defines the raw file that will be loaded.
-const string BVHExample::PATH = "models/beethoven.raw";
+//const string BVHExample::PATH = "models/armadillo.raw";
+//const string BVHExample::PATH = "models/beethoven.raw";
+//const string BVHExample::PATH = "models/bunny.raw";
+//const string BVHExample::PATH = "models/camel.raw";
+//const string BVHExample::PATH = "models/car.raw";
+//const string BVHExample::PATH = "models/cow.raw";
+//const string BVHExample::PATH = "models/cow_deform2.raw";
+//const string BVHExample::PATH = "models/dolphins.raw";
+//const string BVHExample::PATH = "models/horse.raw";
+//const string BVHExample::PATH = "models/octopus.raw";
+//const string BVHExample::PATH = "models/roseinvase.raw";
+//const string BVHExample::PATH = "models/scene.raw";
+//const string BVHExample::PATH = "models/sphere.raw";
+//const string BVHExample::PATH = "models/subs.raw";
+//const string BVHExample::PATH = "models/torus.raw";
+const string BVHExample::PATH = "models/womanhead.raw";
 
-void BVHExample::comparePoint(const Tuple3f & point, std::tuple<float, float, float, float, float, float> & currentMM)
+/**
+* @param point - point to be compared with current min and max
+* @param curentMM - current min and max (minX, maxX, minY, maxY, minZ, maxZ)
+*
+* @return - nothing, currentMM are change if point has bigger extreme
+**/
+void comparePoint(const Tuple3f & point, std::tuple<float, float, float, float, float, float> & currentMM)
 {
 	if (point.GetX() < std::get<0>(currentMM)) {
 		std::get<0>(currentMM) = point.GetX();
@@ -46,8 +68,14 @@ void BVHExample::comparePoint(const Tuple3f & point, std::tuple<float, float, fl
 	}
 }
 
-const std::tuple<float, float, float, float, float, float> BVHExample::findMinsAndMax(const unordered_set<Triangle*>& triangles) 
+/**
+* @param triangles - set to find min and max x, y, z
+*
+* @return - tuple with min and max (minX, maxX, minY, maxY, minZ, maxZ)
+**/
+const std::tuple<float, float, float, float, float, float> findMinsAndMax(const unordered_set<Triangle*>& triangles) 
 {
+	//initialize min and max
 	float minX = (*triangles.begin())->v1.GetX();
 	float maxX = (*triangles.begin())->v1.GetX();
 	float minY = (*triangles.begin())->v1.GetY();
@@ -57,21 +85,127 @@ const std::tuple<float, float, float, float, float, float> BVHExample::findMinsA
 
 	auto ret = std::make_tuple(minX, maxX, minY, maxY, minZ, maxZ);
 
+	//find actual min and max
 	for (Triangle* triangle : triangles)
 	{	
 		//check 1st point
-		BVHExample::comparePoint(triangle->v1, ret);
+		comparePoint(triangle->v1, ret);
 
 		//check 2nd point
-		BVHExample::comparePoint(triangle->v2, ret);
+		comparePoint(triangle->v2, ret);
 
 		//check 3rd point
-		BVHExample::comparePoint(triangle->v3, ret);
+		comparePoint(triangle->v3, ret);
 	}
 	return ret;
 }
 
-std::tuple<unordered_set<Triangle*>, unordered_set<Triangle*>> cutModel(AABB & parent)
+/**
+* @param vertex1 - start vertex
+* @param triangles - set to find the furthest vertex from vertex1
+* 
+* @return - furthest vertex from vertex1
+**/
+const Tuple3f findFurthestVertex(const Tuple3f vertex1, const unordered_set<Triangle*>& triangles)
+{
+	Tuple3f vertex2 = (*triangles.begin())->v1;
+	float maxDistance = vertex1.distance(vertex1, vertex2);
+
+	for (auto triangle : triangles)
+	{
+		float distance = vertex1.distance(vertex1, triangle->v1);
+		if (maxDistance < distance) 
+		{
+			vertex2 = triangle->v1;
+			maxDistance = distance;
+		}
+
+		distance = vertex1.distance(vertex1, triangle->v2);
+		if (maxDistance < distance)
+		{
+			vertex2 = triangle->v2;
+			maxDistance = distance;
+		}
+
+		distance = vertex1.distance(vertex1, triangle->v3);
+		if (maxDistance < distance)
+		{
+			vertex2 = triangle->v3;
+			maxDistance = distance;
+		}
+	}
+	return vertex2;
+}
+
+/**
+* this function combines Ritter's bounding sphere and making bounding spheres from "AABB"... because sometimes RBS doesn't compute
+* the center very well, and in case that "AABB" sphere is smaller, program uses that.
+* 
+* @param triangles - set of triangles
+*
+* @return - std::tuple<center, riadial>
+**/
+const std::tuple<Tuple3f, float> computeSphere(const unordered_set<Triangle*>& triangles)
+{
+	//compute bounding sphere from "AABB" box
+	auto box = findMinsAndMax(triangles);
+	Tuple3f boxCenter(
+		(std::get<0>(box) + std::get<1>(box)) / 2,
+		(std::get<2>(box) + std::get<3>(box)) / 2,
+		(std::get<3>(box) + std::get<4>(box)) / 2);
+	Tuple3f m = findFurthestVertex(boxCenter, triangles);
+	float boxRadius = m.distance(m, boxCenter);
+
+	//Ritter's bounding sphere
+	Tuple3f vertex1 = (*triangles.begin())->v1;
+	Tuple3f vertex2 = findFurthestVertex(vertex1, triangles);
+	vertex1 = findFurthestVertex(vertex2, triangles);
+
+	Tuple3f center(
+		(vertex1.GetX() + vertex2.GetX()) / 2, 
+		(vertex1.GetY() + vertex2.GetY()) / 2, 
+		(vertex1.GetZ() + vertex2.GetZ()) / 2);
+	float minDistance = vertex1.distance(vertex1, vertex2) / 2;
+
+	//make sphere bigger, if some vertex has bigger distance from center than current radius
+	for (auto triangle : triangles) {
+		float distance = center.distance(center, triangle->v1);
+		if (minDistance < distance)
+		{
+			minDistance = distance;
+		}
+
+		distance = vertex1.distance(center, triangle->v2);
+		if (minDistance < distance)
+		{
+			minDistance = distance;
+		}
+
+		distance = vertex1.distance(center, triangle->v3);
+		if (minDistance < distance)
+		{
+			minDistance = distance;
+		}
+	}
+
+	//compere witch sphere is smaller
+	if (minDistance < boxRadius) {
+		return std::make_tuple(center, minDistance);
+	}
+	else {
+		return std::make_tuple(boxCenter, boxRadius);
+	}
+}
+
+/*
+* @param AABB - bounding box
+*
+* @return - std::tuple<which axis, where>
+*			0 - cut x axis
+*			1 - cut y axis
+*			2 - cut z axis
+**/
+std::tuple<int, float> howShouldICut(const AABB & parent)
 {
 	Tuple3f min = parent.getMin();
 	Tuple3f max = parent.getMax();
@@ -83,25 +217,76 @@ std::tuple<unordered_set<Triangle*>, unordered_set<Triangle*>> cutModel(AABB & p
 	int axisIndex = 0;
 	float axisPosition = min.x + xAxisSize / 2;
 
-	if (yAxisSize > xAxisSize) 
+	if (yAxisSize > xAxisSize)
 	{
 
-		if (zAxisSize > yAxisSize) 
+		if (zAxisSize > yAxisSize)
 		{
 			axisIndex = 2;
 			axisPosition = min.z + zAxisSize / 2;
 		}
-		else 
+		else
 		{
 			axisIndex = 1;
 			axisPosition = min.y + yAxisSize / 2;
 		}
 	}
-	else if (zAxisSize > xAxisSize) 
+	else if (zAxisSize > xAxisSize)
 	{
 		axisIndex = 2;
 		axisPosition = min.z + zAxisSize / 2;
 	}
+	return std::make_tuple(axisIndex, axisPosition);
+}
+
+std::tuple<int, float> howShouldICut(const BSV& parent)
+{
+	auto minmax = findMinsAndMax(parent.triangles);
+
+	float xAxisSize = std::get<1>(minmax) - std::get<0>(minmax);
+	float yAxisSize = std::get<3>(minmax) - std::get<2>(minmax);
+	float zAxisSize = std::get<5>(minmax) - std::get<4>(minmax);
+
+	int axisIndex = 0;
+	float axisPosition = parent.getCenter().x;
+
+	if (yAxisSize > xAxisSize)
+	{
+
+		if (zAxisSize > yAxisSize)
+		{
+			axisIndex = 2;
+			axisPosition = parent.getCenter().z;
+		}
+		else
+		{
+			axisIndex = 1;
+			axisPosition = parent.getCenter().y;
+		}
+	}
+	else if (zAxisSize > xAxisSize)
+	{
+		axisIndex = 2;
+		axisPosition = parent.getCenter().z;
+	}
+	return std::make_tuple(axisIndex, axisPosition);
+}
+
+
+std::tuple<unordered_set<Triangle*>, unordered_set<Triangle*>> cutModel(BVH & parent)
+{
+	std::tuple<int, float> cuttingPosition;
+	if (AABB* aabb = dynamic_cast<AABB*>(&parent))
+	{
+		cuttingPosition = howShouldICut(*aabb);
+	}
+	else if (BSV* bsv = dynamic_cast<BSV*>(&parent)) 
+	{
+		cuttingPosition = howShouldICut(*bsv);
+	}
+
+	int axisIndex = std::get<0>(cuttingPosition);
+	float axisPosition = std::get<1>(cuttingPosition);
 
 	unordered_set<Triangle*> leftSet;
 	unordered_set<Triangle*> rightSet;
@@ -162,15 +347,15 @@ std::tuple<unordered_set<Triangle*>, unordered_set<Triangle*>> cutModel(AABB & p
  * @param depth - The maximum depth the binary tree should have.
  * @param volumeType - The flag determining the requested bounding volume.
  */
-BVH* BVHExample::construct(unordered_set<Triangle*> triangles, int depth, VolumeType volumeType) const
+BVH* BVHExample::construct(const unordered_set<Triangle*> & triangles, int depth, VolumeType volumeType) const
 {
+	if (depth == 0)
+	{
+		return nullptr;
+	}
+
 	if (volumeType == VolumeType::AxisAlignedBoundingBox)
 	{
-		if (depth == 0) 
-		{
-			return nullptr;
-			BVHExample::construct(triangles, depth - 1, VolumeType::AxisAlignedBoundingBox);
-		}
 
 		auto borders = findMinsAndMax(triangles);
 
@@ -195,8 +380,26 @@ BVH* BVHExample::construct(unordered_set<Triangle*> triangles, int depth, Volume
 	}
 	else
 	{
-		return new BSV(0, 0, 0, 1, triangles);
+		auto sphereTuple =computeSphere(triangles);
 
+		BSV* sphere = new BSV(std::get<0>(sphereTuple).x, std::get<0>(sphereTuple).y, std::get<0>(sphereTuple).z,
+			std::get<1>(sphereTuple) , triangles);
+
+		auto children = cutModel(*sphere);
+
+		auto leftChild = construct(std::get<0>(children), depth - 1, volumeType);
+		auto rightChild = construct(std::get<1>(children), depth - 1, volumeType);
+
+		if (depth != 1)
+		{
+			sphere->setLeft(leftChild);
+			sphere->setRight(rightChild);
+
+			leftChild->setParent(sphere);
+			rightChild->setParent(sphere);
+		}
+
+		return sphere;
 	}
 }
 
@@ -258,6 +461,25 @@ int isBoxVisible(const AABB& box, const Tuple3f& cameraPosition, const Vector3f 
 	return ret;
 }
 
+int isSphereVisible(const BSV& sphere, const Tuple3f& cameraPosition, const Vector3f& cameraNormal) 
+{
+	int ret = -1;
+	if (isVertexVisible(sphere.getCenter(), cameraPosition, cameraNormal)) 
+	{
+		ret++;
+		if (isVertexVisible(sphere.getCenter() - cameraNormal, cameraPosition, cameraNormal)) {
+			ret++;
+		}
+	}
+	else 
+	{
+		if (isVertexVisible(sphere.getCenter() + cameraNormal, cameraPosition, cameraNormal)) {
+			ret++;
+		}
+	}
+	return ret;
+}
+
 /**
  * This method will return all possibly visible triangles from the current camera (assuming orthographic projection).
  * In other words, the method will return all triangles that have at least one vertex in a half-space defined by a plane.
@@ -290,60 +512,53 @@ unordered_set<Triangle*> BVHExample::pvs(BVH* node, const Tuple3f cameraPosition
 	const Vector3f cameraRightVector, const Vector3f cameraUpVector, 
 	int& testedTriangles, unordered_set<BVH*>& visibleVolumes) const
 {
+	int visibilityCheck = -1;
 	if (AABB* aabb = dynamic_cast<AABB*>(node))
 	{
-		int visibilityCheck = isBoxVisible(*aabb, cameraPosition, cameraNormal);
-		unordered_set<Triangle*> visible;
-
-		switch (visibilityCheck) 
-		{
-		case(-1): 
-			return unordered_set<Triangle*>();
-			break;
-		case(0):
-			visibleVolumes.insert(node);
-			if (node->isLeaf()) 
-			{
-				for(auto triangle : node->getTriangles())
-				{
-					testedTriangles++;
-					if (isVertexVisible(triangle->v1, cameraPosition, cameraNormal) ||
-						isVertexVisible(triangle->v2, cameraPosition, cameraNormal) ||
-						isVertexVisible(triangle->v3, cameraPosition, cameraNormal)) 
-					{
-						visible.insert(triangle);
-					}
-				}
-			}
-			else
-			{
-				auto leftVisible = pvs(node->getLeft(), cameraPosition, cameraNormal, cameraRightVector, cameraUpVector, testedTriangles, visibleVolumes);
-				visible.insert(leftVisible.begin(), leftVisible.end());
-				auto rightVisible = pvs(node->getRight(), cameraPosition, cameraNormal, cameraRightVector, cameraUpVector, testedTriangles, visibleVolumes);
-				visible.insert(rightVisible.begin(), rightVisible.end());
-			}
-			return visible;
-			break;
-		case(1):
-			visibleVolumes.insert(node);
-			return aabb->getTriangles();
-			break;
-		default:
-			break;
-		}
-
-
-		visibleVolumes.insert(node);
-		testedTriangles = -1;
-		return 	aabb->getTriangles();
+		visibilityCheck = isBoxVisible(*aabb, cameraPosition, cameraNormal);
 	}
 	else if (BSV* sbb = dynamic_cast<BSV*>(node))
 	{
+		visibilityCheck = isSphereVisible(*sbb, cameraPosition, cameraNormal);
+	}
+	unordered_set<Triangle*> visible;
+
+	switch (visibilityCheck)
+	{
+	case(-1):
+		return unordered_set<Triangle*>();
+		break;
+	case(0):
 		visibleVolumes.insert(node);
-		testedTriangles = -1;
-		return sbb->getTriangles();
+		if (node->isLeaf())
+		{
+			for (auto triangle : node->getTriangles())
+			{
+				testedTriangles++;
+				if (isVertexVisible(triangle->v1, cameraPosition, cameraNormal) ||
+					isVertexVisible(triangle->v2, cameraPosition, cameraNormal) ||
+					isVertexVisible(triangle->v3, cameraPosition, cameraNormal))
+				{
+					visible.insert(triangle);
+				}
+			}
+		}
+		else
+		{
+			auto leftVisible = pvs(node->getLeft(), cameraPosition, cameraNormal, cameraRightVector, cameraUpVector, testedTriangles, visibleVolumes);
+			visible.insert(leftVisible.begin(), leftVisible.end());
+			auto rightVisible = pvs(node->getRight(), cameraPosition, cameraNormal, cameraRightVector, cameraUpVector, testedTriangles, visibleVolumes);
+			visible.insert(rightVisible.begin(), rightVisible.end());
+		}
+		return visible;
+		break;
+	case(1):
+		visibleVolumes.insert(node);
+		return node->getTriangles();
+		break;
+	default:
+		break;
 	}
 
-	testedTriangles = -999;
-	return unordered_set<Triangle*>();
+	return node->getTriangles();
 }

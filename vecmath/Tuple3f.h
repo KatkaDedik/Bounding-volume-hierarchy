@@ -100,6 +100,8 @@ public:
 	*/
 	Tuple3f operator+ (const Tuple3f& rhs)  const;
 
+	Tuple3f& operator+= (const Tuple3f& rhs);
+
 	/**
 	* The new definition for the '-' operator allowing to deduct two tuples coordinates-wise.
 	*
